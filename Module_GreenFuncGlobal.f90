@@ -79,18 +79,9 @@ module GreenFuncMod
 
 implicit none
 
-real(8)			::	pi	=	4.0d0*datan(1.0d0)
-real(8)			::	gama=	0.5772156649d0
-complex(8)		::  Im	=	dcmplx(0.0d0,1.0d0)
-	
-real(8)			::	GF_alpha
-real(8)			::	GF_beta
-real(8)			::	GF_sigma
-real(8)			::	GF_rho
-real(8)			::	GF_dd
-
-real(8)			::	GF_hh
-real(8)			::	GF_vv
+real(8), parameter    ::  pi   =  4.0d0*datan(1.0d0)
+real(8), parameter    ::  gama =  0.5772156649d0
+complex(8), parameter ::  Im   =  dcmplx(0.0d0,1.0d0)
 
 contains
 
@@ -104,14 +95,17 @@ subroutine HavelockGF(dx,dy,vv,GF)
 	complex(8),intent(out)	::	GF(0:3)
 
 ! --- Local variables -------------------------------------
-	real(8)					::	hh
-	complex(8)				::	GFh
+	real(8)								::	hh, dd, alpha, beta, rho
+	complex(8)						::	GFh
 
 	hh	=	dsqrt(dx*dx+dy*dy)
-	call	GF_DivParameters(hh,vv)
+  dd = dsqrt(hh*hh+vv*vv)
+  alpha = -vv/dd
+  beta = hh/dd
+  rho = dd/(1.0d0+dd)
  
-	GF(0)	=	GF_Func_L0(hh,vv)+GF_Func_W(hh,vv)
-	GFh		=	GF_Func_Ls(hh,vv)+GF_Func_Wh(hh,vv)
+	GF(0)	=	GF_Func_L0(hh, vv, dd, alpha, beta, rho) + GF_Func_W(hh, vv)
+	GFh		=	GF_Func_Ls(hh, vv, dd, alpha, beta, rho) + GF_Func_Wh(hh, vv)
 
 	if(hh > 1.0d-6) then
 		GF(1)	=	GFh*dx/hh
@@ -124,73 +118,53 @@ subroutine HavelockGF(dx,dy,vv,GF)
 	GF(3)	=	GF(0)
 
 end subroutine HavelockGF
-    
+
 !=============================================================
-subroutine GF_DivParameters(hh,vv)
+function GF_Func_L0(hh,vv, dd, alpha, beta, rho)
 
 	implicit none
 
 ! --- Variables -------------------------------------------
-	real(8),intent(in)		::	hh,vv
+	real(8),intent(in)		::	hh,vv, dd, alpha, beta, rho
 
 ! --- Local variables -------------------------------------
-
-	GF_dd		=	dsqrt(hh*hh+vv*vv)
-	GF_alpha	=	-vv/GF_dd
-	GF_beta		=	hh/GF_dd
-	GF_sigma	=	hh/(GF_dd-vv)
-	GF_rho		=	GF_dd/(1.0d0+GF_dd)
-    
-	return
-end subroutine GF_DivParameters
-
-!=============================================================
-function GF_Func_L0(hh,vv)
-
-	implicit none
-
-! --- Variables -------------------------------------------
-	real(8),intent(in)		::	hh,vv
-
-! --- Local variables -------------------------------------
-	integer					::	ii
-	real(8)					::	PP,Lp,Cal_L0
+	real(8)					::	PP,Lp
 	real(8)					::	GF_Func_L0
 
-	PP	=	dlog(0.5d0*(GF_dd-vv))+gama-2.0d0*GF_dd*GF_dd
+	PP	=	dlog(0.5d0*(dd-vv))+gama-2.0d0*dd*dd
 	PP	=	dexp(vv)*PP
-	PP	=	PP+GF_dd*GF_dd-vv
+	PP	=	PP+dd*dd-vv
     
-	Lp	=	GF_Func_Lp(hh,vv)
+	Lp	=	GF_Func_Lp(hh,vv, dd, alpha, beta, rho)
     
-	GF_Func_L0	=	2.0d0*PP/(1.0d0+GF_dd**3)+2.0d0*Lp
+	GF_Func_L0	=	2.0d0*PP/(1.0d0+dd**3)+2.0d0*Lp
 
 	return
 end function GF_Func_L0
 
 !=============================================================
-function GF_Func_Lp(hh,vv)
+function GF_Func_Lp(hh,vv, dd, alpha, beta, rho)
 
 	implicit none
 
 ! --- Variables -------------------------------------------
-	real(8),intent(in)		::	hh,vv
+	real(8),intent(in)		::	hh,vv, dd, alpha, beta, rho
 
 ! --- Local variables -------------------------------------
-	real(8)					::	A,B,C,D,RR,Lp
+	real(8)					::	A,B,C,D,RR
 	real(8)					::	GF_Func_Lp
 
-	A	=	GF_FuncA(GF_rho)
-	B	=	GF_FuncB(GF_rho)
-	C	=	GF_FuncC(GF_rho)
-	D	=	GF_FuncD(GF_rho)
+	A	=	GF_FuncA(rho)
+	B	=	GF_FuncB(rho)
+	C	=	GF_FuncC(rho)
+	D	=	GF_FuncD(rho)
 
-	RR	=	(1.0d0-GF_beta)*A
-	RR	=	RR-GF_beta*B
-	RR	=	RR-GF_alpha*C/(1.0d0+6.0d0*GF_alpha*GF_rho*(1.0d0-GF_rho))
-	RR	=	RR+GF_beta*(1.0d0-GF_beta)*D
+	RR	=	(1.0d0-beta)*A
+	RR	=	RR-beta*B
+	RR	=	RR-alpha*C/(1.0d0+6.0d0*alpha*rho*(1.0d0-rho))
+	RR	=	RR+beta*(1.0d0-beta)*D
 
-	GF_Func_Lp	=	GF_rho*(1.0d0-GF_rho)**3*RR
+	GF_Func_Lp	=	rho*(1.0d0-rho)**3*RR
 
 	return
 end function GF_Func_Lp
@@ -341,51 +315,51 @@ function GF_FuncD(tt)
 end function GF_FuncD
     
 !=============================================================
-function GF_Func_Ls(hh,vv)
+function GF_Func_Ls(hh,vv, dd, alpha, beta, rho)
 
 	implicit none
 
 ! --- Variables -------------------------------------------
-	real(8),intent(in)		::	hh,vv
+	real(8),intent(in)		::	hh,vv, dd, alpha, beta, rho
 
 ! --- Local variables -------------------------------------
 	real(8)					::	PS,QS,Lsp
 	real(8)					::	GF_Func_Ls
 
-	PS	=	(GF_beta+hh)/(GF_dd-vv)
-	PS	=	PS-2.0d0*GF_beta+2.0d0*dexp(vv)*GF_dd-hh
+	PS	=	(beta+hh)/(dd-vv)
+	PS	=	PS-2.0d0*beta+2.0d0*dexp(vv)*dd-hh
  
-	QS	=	dexp(-GF_dd)*(1.0d0-GF_beta)
-	QS	=	QS*(1.0d0+GF_dd/(1.0d0+GF_dd**3))
+	QS	=	dexp(-dd)*(1.0d0-beta)
+	QS	=	QS*(1.0d0+dd/(1.0d0+dd**3))
  
-	Lsp	=	GF_Func_Lsp(hh,vv)
+	Lsp	=	GF_Func_Lsp(hh,vv, dd, alpha, beta, rho)
  
-	GF_Func_Ls	=	2.0d0*PS/(1.0d0+GF_dd**3)-4.0d0*QS+2.0d0*Lsp
+	GF_Func_Ls	=	2.0d0*PS/(1.0d0+dd**3)-4.0d0*QS+2.0d0*Lsp
 
 	return
 end function GF_Func_Ls
 
 !=============================================================
-function GF_Func_Lsp(hh,vv)
+function GF_Func_Lsp(hh,vv, dd, alpha, beta, rho)
 
 	implicit none
 
 ! --- Variables -------------------------------------------
-	real(8),intent(in)		::	hh,vv
+	real(8),intent(in)		::	hh,vv, dd, alpha, beta, rho
 
 ! --- Local variables -------------------------------------
 	real(8)					::	A,B,C,RR
 	real(8)					::	GF_Func_Lsp
 
-	A	=	GF_dFuncA(GF_rho)
-	B	=	GF_dFuncB(GF_rho)
-	C	=	GF_dFuncC(GF_rho)
+	A	=	GF_dFuncA(rho)
+	B	=	GF_dFuncB(rho)
+	C	=	GF_dFuncC(rho)
 
-	RR	=	GF_beta*A
-	RR	=	RR-(1.0d0-GF_alpha)*B
-	RR	=	RR+GF_beta*(1.0d0-GF_beta)*GF_rho*(1.0d0-2.0d0*GF_rho)*C
+	RR	=	beta*A
+	RR	=	RR-(1.0d0-alpha)*B
+	RR	=	RR+beta*(1.0d0-beta)*rho*(1.0d0-2.0d0*rho)*C
 
-	GF_Func_Lsp	=	GF_rho*(1.0d0-GF_rho)**3*RR
+	GF_Func_Lsp	=	rho*(1.0d0-rho)**3*RR
 
 	return
 end function GF_Func_Lsp
@@ -691,7 +665,6 @@ function StruveH0(xx)
 
 ! --- Local variables -------------------------------------
 
-	integer					::	ii
 	real(8)					::	P0,P1,P2
 	real(8)					::	P3,P4,P5
 	real(8)					::	a0,a1,a2,a3
@@ -747,7 +720,6 @@ function StruveH1(xx)
 
 ! --- Local variables -------------------------------------
 
-	integer					::	ii
 	real(8)					::	P1,P2,P3
 	real(8)					::	P4,P5,P6
 	real(8)					::	a0,a1,a2,a3
